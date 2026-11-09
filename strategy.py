@@ -1,27 +1,14 @@
-"""Causal baseline, optional symbols. No requirement to manufacture market diversity.
-Slow 20-bar momentum, entries after 10:00 CT, flat at 14:00. Not claimed profitable.
-"""
+"""Causal GC short-horizon reversal, sampled every 30 completed minutes to limit churn."""
 import numpy as np
-
-
-def entry_risk(panel):
-    return {symbol: np.zeros(len(df)) for symbol, df in panel.items()}
-
-
+PARAMS={"lookback":5,"interval":30,"start_sec":34200,"end_sec":50400,"risk":250}
+def entry_risk(panel): return {s:np.full(len(d),PARAMS['risk'],dtype=float) for s,d in panel.items()}
 def signals(panel):
-    result = {}
-    for symbol, df in panel.items():
-        out = np.zeros(len(df), dtype=np.int64)
-        # Two micros only, at most 0.2 standard equivalents total.
-        if symbol not in ('MES', 'MGC'):
-            result[symbol] = out
-            continue
-        for indices in df.groupby('session', sort=False).indices.values():
-            close = df.close.to_numpy()[indices]
-            sec = df.ct_sec.to_numpy()[indices]
-            # Rolling mean excludes future rows; warmup restarts each session.
-            for j in range(20, len(indices)):
-                if 36000 <= sec[j] < 50400:
-                    out[indices[j]] = int(np.sign(close[j] - close[j-20:j].mean()))
-        result[symbol] = out
-    return result
+ out={s:np.zeros(len(d),dtype=np.int64) for s,d in panel.items()}
+ if 'GC' not in panel:return out
+ d=panel['GC'];c=d.close.to_numpy();sec=d.ct_sec.to_numpy();x=np.zeros(len(d),dtype=np.int64)
+ for ix in d.groupby('session',sort=False).indices.values():
+  side=0
+  for j,i in enumerate(ix):
+   if PARAMS['start_sec']<=sec[i]<PARAMS['end_sec'] and j>=PARAMS['lookback'] and j%PARAMS['interval']==0: side=-int(np.sign(c[i]-c[ix[j-PARAMS['lookback']]]))
+   if PARAMS['start_sec']<=sec[i]<PARAMS['end_sec']:x[i]=side
+ out['GC']=x;return out
